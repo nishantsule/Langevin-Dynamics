@@ -1,6 +1,7 @@
 # Import useful packages
 import numpy as np
 import time
+import itertools
 from collections import deque
 from bokeh.plotting import figure 
 from bokeh.layouts import row, column, widgetbox
@@ -12,12 +13,13 @@ from bokeh.models import Label
 kb = 1.380e-23  # Boltzmann constant
 boxsize = 30e-6
 partrad = 1.5e-6
+run_count = 0
 # Queue for holding recent particle positions
 pos_x = deque('', 100)
 pos_y = deque('', 100)
 # List for holding time points and MSD
 timepoints = []
-msd = []
+disp = []
 
 # Defines a class for the Langevin simulation
 class Langevin2D:
@@ -78,11 +80,11 @@ class Langevin2D:
     
     # Calculate MSD
     def calc_meanpos(self, timestep, r3):
-        global msd, timepoints
-        msd.append(np.sqrt((self.x[0] * 1e6)**2 + (self.x[1] * 1e6)**2))
+        global disp, timepoints
+        disp.append(np.sqrt((self.x[0] * 1e6)**2 + (self.x[1] * 1e6)**2))
         timepoints.append(self.dt * timestep) 
         r3.data_source.data['x'] = timepoints
-        r3.data_source.data['y'] = msd
+        r3.data_source.data['y'] = disp
 
 def modify_doc(doc):
 
@@ -98,7 +100,7 @@ def modify_doc(doc):
     
     p2 = figure(plot_width=500, plot_height=500, title='Particle Displacement', x_range=[0, 0.5],
                 y_range=[0, boxsize*1e6])
-    r3 = p2.circle(timepoints, msd, color='chocolate', size=1)
+    r3 = p2.circle(timepoints, disp, color='chocolate', size=1)
     p2.xaxis.axis_label = 'time (s)'
     p2.yaxis.axis_label = 'displacement (um)'
     p2.toolbar.logo = None
@@ -109,12 +111,18 @@ def modify_doc(doc):
     TextDisp = Div(text='''<b>Note:</b> Wait for simulation  to stop before pressing buttons.''')
     StartButton = Button(label='Start', button_type="success")
     clearbutton = Button(label='Clear', button_type='warning')
-    mass_density_of_particle = Slider(title='Particle mass density (kg/m^3)', value=1000, start=100, end=2000, step=100)
+    mass_density_of_particle = Slider(title='Particle mass density (kg/m^3)', value=1000, start=100, end=5000, step=100)
     fluid_viscosity = Slider(title='Dynamic viscosity (mPa.s)', value=1, start=0.01, end=1, step=0.05)
-    temperature = Slider(title='Temperature (K)', value=300, start=50, end=500, step=50)
+    temperature = Slider(title='Temperature (K)', value=300, start=50, end=400, step=50)
     strength_of_potential = Slider(title='Strength of quadratic potential', value=0, start=0, end=1, step=0.1)
     radiotext = Div(text='''<b>Simulation Duration</b>''')
     simulation_duration = RadioButtonGroup(labels=['Short', 'Regular', 'Long'], active=0)
+    texttitle = Div(text='''<b>BROWNIAN MOTION: SOLVING THE LANGEVIN EQUATION</b>''', width=1000)
+    textdesc = Div(text='''This app simulates Brownian motion of a single microscopic particle in a fluid by solving the 
+                   Langevin equation. You can change the particle mass density, the fluid viscosity, and the temperature 
+                   to see how it affects Brownian motion. You can also add a parabolic potential at the center and vary 
+                   its strength to see how a trapped particle undergoes constrained Brownian motion''', width=1000)
+    textrel = Div(text='''Learn more about how this app works and Brownian motion in <b>ES/AM 115</b>''', width=1000)
    
     # Start the Langevin simulation
     def start_Langevin_sim(event):
@@ -130,7 +138,7 @@ def modify_doc(doc):
         else:
             runtime = 0.5
 
-        global pos_x, pos_y
+        global pos_x, pos_y, run_count
         pos_x.clear()
         pos_y.clear()
         # Create langevin class object
@@ -153,11 +161,13 @@ def modify_doc(doc):
             runtime = 0.2
         else:
             runtime = 0.5
-        global pos_x, pos_y, timepoints, msd
+        global pos_x, pos_y, timepoints, disp, run_count
         pos_x.clear()
         pos_y.clear()
         timepoints.clear()
-        msd.clear()
+        disp.clear()
+        run_count = 0
+
         # Create langevin class object
         l2d = Langevin2D(mden, fvisc, temp, spot)
         l2d.plot_trajectories(r1, r2)
@@ -168,8 +178,8 @@ def modify_doc(doc):
     clearbutton.on_event(ButtonClick, clear_sim)
     wbox1 = widgetbox(radiotext, simulation_duration)
     wbox2 = widgetbox(TextDisp, StartButton, clearbutton)
-    doc.add_root(column(row(mass_density_of_particle, fluid_viscosity, wbox1), row(temperature, strength_of_potential, wbox2),
-                 row(p1, p2)))
+    doc.add_root(column(texttitle, textdesc, row(mass_density_of_particle, fluid_viscosity, wbox1), 
+                 row(temperature, strength_of_potential, wbox2), row(p1, p2), textrel))
 
 server = Server({'/': modify_doc}, num_procs=1)
 server.start()
